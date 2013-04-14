@@ -53,7 +53,7 @@ public OnPluginStart() {
 	g_hCvarTitle = CreateConVar("sm_logupload_title", "Auto Uploaded Log", "Title to use on logs.tf", FCVAR_PROTECTED);
 	
 	// Non-protected cvars
-	g_hCvarUploadMode = CreateConVar("sm_logupload_mode", "0", "Determines when LogUpload should upload logs (0 = End of ANY Game, 1 = End of TOURNAMENT Game)", 0, true, 0.0, true, 1.0);
+	g_hCvarUploadMode = CreateConVar("sm_logupload_mode", "1", "Determines when LogUpload should upload logs (0 = End of ANY Game, 1 = End of TOURNAMENT Game)", 0, true, 0.0, true, 1.0);
 	g_hCvarDisplayMode = CreateConVar("sm_logupload_display", "0", "Determines how LogUpload displays uploaded log urls (0 = Chat, 1 = Hint, 2 = Center Text)", 0, true, 0.0, true, 2.0);
 	
 	// Cvars used for titles
