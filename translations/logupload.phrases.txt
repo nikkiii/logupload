@@ -1,0 +1,15 @@
+"Phrases"
+{
+	"ChatText"
+	{
+		"en"			"\x04[LogUpload]\x01 Log file uploaded to \x04%s"
+	}
+	"HintText"
+	{
+		"en"			"Log file uploaded to %s"
+	}
+	"CenterText"
+	{
+		"en"			"Log file uploaded to %s"
+	}
+}
