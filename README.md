@@ -4,7 +4,7 @@ An experimental log uploader for Sourcemod TF2 servers and Logs.tf
 
 ## Working HTTP extension implementations
 
-* cURL
+* cURL (http://forums.alliedmods.net/showthread.php?t=152216)
 
 ## Broken HTTP extension implementations
 
