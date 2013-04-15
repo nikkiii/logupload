@@ -2,7 +2,7 @@
 {
 	"ChatText"
 	{
-		"en"			"\x04[LogUpload]\x01 Log file uploaded to \x04%s"
+		"en"			"Log file uploaded to {lightgreen}%s"
 	}
 	"HintText"
 	{

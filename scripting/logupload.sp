@@ -2,6 +2,7 @@
 
 #include <sourcemod>
 #include <json>
+#include <colors>
 
 #undef REQUIRE_EXTENSIONS
 #include <cURL>
@@ -66,7 +67,7 @@ public OnPluginStart() {
 	// Log Name, Title, Map
 	g_hForwardUploading = CreateGlobalForward("OnLogUploading", ET_Event, Param_String, Param_String, Param_String);
 	// Log URL, Title, Map
-	g_hForwardUploaded = CreateGlobalForward("OnLogUploaded", ET_Event, Param_String, Param_String, Param_String);
+	g_hForwardUploaded = CreateGlobalForward("OnLogUploaded", ET_Event, Param_String, Param_String, Param_String, Param_String);
 	
 	// Win conditions met (maxrounds, timelimit)
 	HookEvent("teamplay_game_over", Event_GameOver);
@@ -77,6 +78,8 @@ public OnPluginStart() {
 	AutoExecConfig(true, "plugin.logupload");
 	
 	LoadTranslations("logupload.phrases");
+	
+	RegConsoleCmd("sm_forceupload", Command_ForceUpload);
 }
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
@@ -182,6 +185,11 @@ public Native_UploadLog(Handle:plugin, numParams) {
 
 // Events
 
+public Action:Command_ForceUpload(client, args) {
+	ScanLogs();
+	return Plugin_Handled;
+}
+
 public Event_GameOver(Handle:event, const String:name[], bool:dontBroadcast) {
 	new uploadMode = GetConVarInt(g_hCvarUploadMode);
 	new bool:tournament = GetConVarBool(g_hCvarTournament);
@@ -206,17 +214,18 @@ public Action:Timer_ScanLogs(Handle:timer) {
 	decl String:fileName[32], String:fullPath[PLATFORM_MAX_PATH];
 	PrintToServer("Log scan starting");
 	
-	new lowestLogId = -1;
+	new lowestLogId = -1, currentTime = GetTime();
 	decl String:lowestLog[32];
 	// Scan for new files, we'll store the most recent files first.
 	new Handle:dir = OpenDirectory("logs/");
 	while(ReadDirEntry(dir, fileName, sizeof(fileName))) {
-		if (StrEqual(fileName, ".")) {
+		if (StrEqual(fileName, ".") || StrEqual(fileName, "..")) {
 			continue;
 		}
 		Format(fullPath, sizeof(fullPath), "logs/%s", fileName);
 		new fileTime = GetFileTime(fullPath, FileTime_LastChange);
-		if (GetTime() - fileTime <= 5) {
+		if (currentTime - fileTime <= 5) {
+			PrintToServer("Log %s diff: %i", fileName, currentTime - fileTime);
 			decl String:logIdS[4];
 			strcopy(logIdS, sizeof(logIdS), fileName[5]);
 			new logId = StringToInt(logIdS);
@@ -230,7 +239,7 @@ public Action:Timer_ScanLogs(Handle:timer) {
 	// This is the log we closed
 	if(lowestLogId != -1) {
 		PrintToServer("Found log %s", lowestLog);
-		LogUpload_Upload(fullPath);
+		LogUpload_Upload(lowestLog);
 	} else {
 		PrintToServer("Unable to find valid log.");
 	}
@@ -267,10 +276,10 @@ LogUpload_DoUpload(const String:fullPath[], const String:title[], const String:m
 		strcopy(fileName, sizeof(fileName), fullPath);
 	}
 	
+	LogMessage("Uploading %s (Path: %s)", fileName, fullPath);
+	
 	if (CURL_AVAILABLE()) {
 		UploadLog_cURL(fileName, fullPath, title, map);
-	} else if (SOCKET_AVAILABLE()) {
-		UploadLog_Socket(fileName, fullPath, title, map);
 	} else {
 		LogError("Unable to find valid upload method!");
 	}
@@ -302,13 +311,13 @@ LogUpload_Completed(const String:filePath[], const String:title[], const String:
 			
 			switch(GetConVarInt(g_hCvarDisplayMode)) {
 				case 0: {
-					PrintToChatAll("%T", "ChatText", logUrl);
+					CPrintToChatAll("{green}[LogUpload]{default} %t", "ChatText", logUrl);
 				}
 				case 1: {
-					PrintHintTextToAll("%T", "HintText", logUrl);
+					PrintHintTextToAll("%t", "HintText", logUrl);
 				}
 				case 2: {
-					PrintCenterTextAll("%T", "CenterText", logUrl);
+					PrintCenterTextAll("%t", "CenterText", logUrl);
 				}
 			}
 		}

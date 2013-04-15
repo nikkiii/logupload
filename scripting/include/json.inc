@@ -601,7 +601,7 @@ JSON_FUNC JSON:json_decode(const String:string[], &pos=0, len=0)
 							return JSON_INVALID;
 						}
 						
-						__json_string[key_len + 1] = '\0';
+						__json_string[ string_len ] = EOS;
 						
 						strcopy( __json_key, min( sizeof( __json_key ), key_len ), string[ key_start ] );
 						
