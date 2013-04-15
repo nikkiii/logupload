@@ -78,8 +78,6 @@ public OnPluginStart() {
 	AutoExecConfig(true, "plugin.logupload");
 	
 	LoadTranslations("logupload.phrases");
-	
-	RegConsoleCmd("sm_forceupload", Command_ForceUpload);
 }
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
@@ -185,11 +183,6 @@ public Native_UploadLog(Handle:plugin, numParams) {
 
 // Events
 
-public Action:Command_ForceUpload(client, args) {
-	ScanLogs();
-	return Plugin_Handled;
-}
-
 public Event_GameOver(Handle:event, const String:name[], bool:dontBroadcast) {
 	new uploadMode = GetConVarInt(g_hCvarUploadMode);
 	new bool:tournament = GetConVarBool(g_hCvarTournament);
@@ -225,7 +218,6 @@ public Action:Timer_ScanLogs(Handle:timer) {
 		Format(fullPath, sizeof(fullPath), "logs/%s", fileName);
 		new fileTime = GetFileTime(fullPath, FileTime_LastChange);
 		if (currentTime - fileTime <= 5) {
-			PrintToServer("Log %s diff: %i", fileName, currentTime - fileTime);
 			decl String:logIdS[4];
 			strcopy(logIdS, sizeof(logIdS), fileName[5]);
 			new logId = StringToInt(logIdS);
