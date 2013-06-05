@@ -34,6 +34,11 @@ forward OnLogUploaded(const String:filePath[], const String:logUrl[], const Stri
  */
 native LogUpload_UploadLog(const String:filePath[], const String:title[], const String:map[]);
 
+/**
+ * Uploads a log file using the built in search function
+ */
+native LogUpload_ForceUpload();
+
 public SharedPlugin:__pl_logupload = 
 {
 	name = "logupload",

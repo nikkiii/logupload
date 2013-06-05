@@ -3,28 +3,46 @@
 #include <sourcemod>
 #include <json>
 #include <colors>
+#include <sdktools>
+
+#undef REQUIRE_PLUGIN
+#include <updater>
 
 #undef REQUIRE_EXTENSIONS
 #include <cURL>
 #include <socket>
 #define REQUIRE_EXTENSIONS
 
-#define PLUGIN_VERSION "0.1.1"
+#define PLUGIN_VERSION "0.1.3"
+
+#define UPDATE_URL "http://nikkii.us/logupload/version.txt"
 
 #define LOGS_HOST "logs.tf"
 #define LOGS_PATH "/upload"
 
 #include "logupload/curl.sp"
-
 #include "logupload/socket.sp"
 
 #define CURL_AVAILABLE()		(GetFeatureStatus(FeatureType_Native, "curl_easy_init") == FeatureStatus_Available)
 #define SOCKET_AVAILABLE()		(false) //(GetFeatureStatus(FeatureType_Native, "SocketCreate") == FeatureStatus_Available)
 
+// Combine the following values to get the display mode to your liking
+// 1: Show log URL in chat
+#define DISPLAYFLAG_CHAT (1 << 0)
+// 2: Show log URL in a Hint Box
+#define DISPLAYFLAG_HINT (1 << 1)
+// 4: Show log URL in a center message
+#define DISPLAYFLAG_CENTER (1 << 2)
+
 new Handle:g_hCvarKey = INVALID_HANDLE;
 new Handle:g_hCvarTitle = INVALID_HANDLE;
+
+new Handle:g_hCvarEnabled = INVALID_HANDLE;
 new Handle:g_hCvarUploadMode = INVALID_HANDLE;
 new Handle:g_hCvarDisplayMode = INVALID_HANDLE;
+new Handle:g_hCvarUpdater = INVALID_HANDLE;
+new Handle:g_hCvarNextUploadDelay = INVALID_HANDLE;
+new Handle:g_hCvarLogDirectory = INVALID_HANDLE;
 
 new Handle:g_hBlueTeamName = INVALID_HANDLE;
 new Handle:g_hRedTeamName = INVALID_HANDLE;
@@ -33,6 +51,8 @@ new Handle:g_hForwardUploading = INVALID_HANDLE;
 new Handle:g_hForwardUploaded = INVALID_HANDLE;
 new Handle:g_hCvarTournament = INVALID_HANDLE;
 
+new g_iLastUpload = -1;
+
 public Plugin:myinfo = {
 	name = "logs.tf uploader",
 	author = "Nikki",
@@ -40,45 +60,6 @@ public Plugin:myinfo = {
 	version = PLUGIN_VERSION,
 	url = "http://nikkii.us"
 };
-
-public OnPluginStart() {
-	if (!CURL_AVAILABLE() && !SOCKET_AVAILABLE()) {
-		SetFailState("Valid HTTP Extension not found");
-	}
-	
-	// Version cvar
-	CreateConVar("sm_logupload_version", PLUGIN_VERSION, "LogUpload version", FCVAR_PLUGIN|FCVAR_NOTIFY|FCVAR_DONTRECORD);
-	
-	// Uploader cvars
-	g_hCvarKey = CreateConVar("sm_logupload_key", "", "Your logs.tf API key", FCVAR_PROTECTED);
-	g_hCvarTitle = CreateConVar("sm_logupload_title", "Auto Uploaded Log", "Title to use on logs.tf", FCVAR_PROTECTED);
-	
-	// Non-protected cvars
-	g_hCvarUploadMode = CreateConVar("sm_logupload_mode", "1", "Determines when LogUpload should upload logs (0 = End of ANY Game, 1 = End of TOURNAMENT Game)", 0, true, 0.0, true, 1.0);
-	g_hCvarDisplayMode = CreateConVar("sm_logupload_display", "0", "Determines how LogUpload displays uploaded log urls (0 = Chat, 1 = Hint, 2 = Center Text)", 0, true, 0.0, true, 2.0);
-	
-	// Cvars used for titles
-	g_hBlueTeamName = FindConVar("mp_tournament_blueteamname");
-	g_hRedTeamName = FindConVar("mp_tournament_redteamname");
-	
-	// Tournament cvar (Only upload logs from tournaments)
-	g_hCvarTournament = FindConVar("mp_tournament");
-	
-	// Log Name, Title, Map
-	g_hForwardUploading = CreateGlobalForward("OnLogUploading", ET_Event, Param_String, Param_String, Param_String);
-	// Log URL, Title, Map
-	g_hForwardUploaded = CreateGlobalForward("OnLogUploaded", ET_Event, Param_String, Param_String, Param_String, Param_String);
-	
-	// Win conditions met (maxrounds, timelimit)
-	HookEvent("teamplay_game_over", Event_GameOver);
-
-	// Win conditions met (windifference)
-	HookEvent("tf_game_over", Event_GameOver);
-	
-	AutoExecConfig(true, "plugin.logupload");
-	
-	LoadTranslations("logupload.phrases");
-}
 
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) {
 	// cURL
@@ -102,11 +83,78 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) 
 	// Natives
 	
 	CreateNative("LogUpload_UploadLog", Native_UploadLog);
+	CreateNative("LogUpload_ForceUpload", Native_ForceUpload);
 	
 	return APLRes_Success;
 }
 
+public OnPluginStart() {
+	if (!CURL_AVAILABLE() && !SOCKET_AVAILABLE()) {
+		SetFailState("Valid HTTP Extension not found");
+	}
+	
+	// Version cvar
+	CreateConVar("sm_logupload_version", PLUGIN_VERSION, "LogUpload version", FCVAR_PLUGIN|FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	
+	// Uploader cvars
+	g_hCvarKey = CreateConVar("sm_logupload_key", "", "Your logs.tf API key", FCVAR_PROTECTED);
+	g_hCvarTitle = CreateConVar("sm_logupload_title", "{BLUENAME} vs {REDNAME} on {MAP}", "Title to use on logs.tf", FCVAR_PROTECTED);
+	
+	// Non-protected cvars
+	g_hCvarEnabled = CreateConVar("sm_logupload_enabled", "1", "Enables/Disables LogUpload", 0, true, 0.0, true, 1.0);
+	g_hCvarUploadMode = CreateConVar("sm_logupload_mode", "1", "Determines when LogUpload should upload logs (0 = End of ANY Game, 1 = End of TOURNAMENT Game)", 0, true, 0.0, true, 1.0);
+	g_hCvarDisplayMode = CreateConVar("sm_logupload_display", "5", "Determines how LogUpload displays uploaded log urls\nCombine these values for more than 1:\n1: Show log URL in chat\n2: Show log URL in hint box\n3: Show log URL in center message", 0, true, 0.0, true, 7.0);
+	g_hCvarUpdater = CreateConVar("sm_logupload_updater", "1", "Enables/disables Updater", 0, true, 0.0, true, 1.0);
+	g_hCvarNextUploadDelay = CreateConVar("sm_logupload_delay", "60", "Sets how long until after a log is uploaded that another one can be.", 0, true);
+	
+	// Cvars used for titles
+	g_hBlueTeamName = FindConVar("mp_tournament_blueteamname");
+	g_hRedTeamName = FindConVar("mp_tournament_redteamname");
+	
+	// Tournament cvar (Only upload logs from tournaments)
+	g_hCvarTournament = FindConVar("mp_tournament");
+	
+	// Log directory cvar (TODO some kind of verificaton on directory?)
+	g_hCvarLogDirectory = FindConVar("sv_logsdir");
+	
+	// Log Name, Title, Map
+	g_hForwardUploading = CreateGlobalForward("OnLogUploading", ET_Event, Param_String, Param_String, Param_String);
+	// Log URL, Title, Map
+	g_hForwardUploaded = CreateGlobalForward("OnLogUploaded", ET_Event, Param_String, Param_String, Param_String, Param_String);
+	
+	// Win conditions met (maxrounds, timelimit)
+	HookEvent("teamplay_game_over", Event_GameOver);
+
+	// Win conditions met (windifference)
+	HookEvent("tf_game_over", Event_GameOver);
+	
+	AutoExecConfig(true, "plugin.logupload");
+	
+	LoadTranslations("logupload.phrases");
+}
+
+// Updater support
+
+public OnConfigsExecuted() {
+	if (LibraryExists("updater") && GetConVarBool(g_hCvarUpdater)) {
+		Updater_AddPlugin(UPDATE_URL);
+	}
+}
+
+public OnLibraryAdded(const String:name[]) {
+	if (StrEqual(name, "updater") && GetConVarBool(g_hCvarUpdater)) {
+		Updater_AddPlugin(UPDATE_URL);
+	}
+}
+
+public OnLibraryRemoved(const String:name[]) {
+	if (StrEqual(name, "updater") && GetConVarBool(g_hCvarUpdater)) {
+		Updater_RemovePlugin();
+	}
+}
+
 // 'getters' for cvars
+
 String:LogUpload_GetKey() {
 	// Read the API key cvar
 	decl String:apiKey[64];
@@ -119,6 +167,7 @@ String:LogUpload_GetLogTitle() {
 	decl String:title[256];
 	GetConVarString(g_hCvarTitle, title, sizeof(title));
 	
+	// Parse the title and replace standard things
 	ParseLogTitle(title, sizeof(title));
 	
 	return title;
@@ -150,6 +199,16 @@ ParseLogTitle(String:title[], maxlen) {
 		GetConVarString(g_hRedTeamName, temp, sizeof(temp));
 		ReplaceString(title, maxlen, "{REDNAME}", temp);
 	}
+	
+	if (StrContains(title, "{BLUESCORE}") != -1) {
+		IntToString(GetTeamScore(3), temp, sizeof(temp));
+		ReplaceString(title, maxlen, "{BLUESCORE}", temp);
+	}
+	
+	if (StrContains(title, "{REDSCORE}") != -1) {
+		IntToString(GetTeamScore(2), temp, sizeof(temp));
+		ReplaceString(title, maxlen, "{REDSCORE}", temp);
+	}
 }
 
 // Natives
@@ -161,9 +220,15 @@ public Native_UploadLog(Handle:plugin, numParams) {
 	}
 	
 	decl String:filePath[PLATFORM_MAX_PATH], String:title[256], String:map[128];
+	
 	GetNativeString(1, filePath, sizeof(filePath));
-	GetNativeString(2, title, sizeof(title));
-	GetNativeString(3, map, sizeof(map));
+	
+	if(numParams > 1) {
+		GetNativeString(2, title, sizeof(title));
+	}
+	if(numParams > 2) {
+		GetNativeString(3, map, sizeof(map));
+	}
 	
 	if(strlen(title) > 0) {
 		ParseLogTitle(title, sizeof(title));
@@ -177,18 +242,32 @@ public Native_UploadLog(Handle:plugin, numParams) {
 	
 	// TODO callback?
 	LogUpload_DoUpload(filePath, title, map);
-	
+	return true;
+}
+
+public Native_ForceUpload(Handle:plugin, numParams) {
+	// Required: Nothing.
+	ScanLogs();
 	return true;
 }
 
 // Events
 
 public Event_GameOver(Handle:event, const String:name[], bool:dontBroadcast) {
+	if(!GetConVarBool(g_hCvarEnabled)) {
+		return;
+	}
+	new uploadDelay = GetConVarInt(g_hCvarNextUploadDelay);
+	if(uploadDelay > 0 && g_iLastUpload != -1 && GetTime() - g_iLastUpload <= uploadDelay) {
+		LogError("Last log uploaded %i seconds ago. Skipping search and upload.");
+		return;
+	}
 	new uploadMode = GetConVarInt(g_hCvarUploadMode);
 	new bool:tournament = GetConVarBool(g_hCvarTournament);
 	if (uploadMode == 0 || uploadMode == 1 && tournament) {
 		ScanLogs();
 	}
+	g_iLastUpload = GetTime();
 }
 
 // Internal code (Log Scanning, Uploading, Callbacks)
@@ -204,18 +283,26 @@ ScanLogs() {
 
 public Action:Timer_ScanLogs(Handle:timer) {
 	// Scan for logs
-	decl String:fileName[32], String:fullPath[PLATFORM_MAX_PATH];
-	PrintToServer("Log scan starting");
+	LogMessage("Log scan starting");
+	
+	decl String:logDirectory[PLATFORM_MAX_PATH], String:fileName[32], String:fullPath[PLATFORM_MAX_PATH];
+	
+	GetConVarString(g_hCvarLogDirectory, logDirectory, sizeof(logDirectory));
+	
+	if(!DirExists(logDirectory)) {
+		LogError("Unable to find correct log directory, is it set correctly? If it is, please submit a bug report.");
+		return Plugin_Handled;
+	}
 	
 	new lowestLogId = -1, currentTime = GetTime();
 	decl String:lowestLog[32];
 	// Scan for new files, we'll store the most recent files first.
-	new Handle:dir = OpenDirectory("logs/");
+	new Handle:dir = OpenDirectory(logDirectory);
 	while(ReadDirEntry(dir, fileName, sizeof(fileName))) {
 		if (StrEqual(fileName, ".") || StrEqual(fileName, "..")) {
 			continue;
 		}
-		Format(fullPath, sizeof(fullPath), "logs/%s", fileName);
+		Format(fullPath, sizeof(fullPath), "%s/%s", logDirectory, fileName);
 		new fileTime = GetFileTime(fullPath, FileTime_LastChange);
 		if (currentTime - fileTime <= 5) {
 			decl String:logIdS[4];
@@ -230,11 +317,12 @@ public Action:Timer_ScanLogs(Handle:timer) {
 	CloseHandle(dir);
 	// This is the log we closed
 	if(lowestLogId != -1) {
-		PrintToServer("Found log %s", lowestLog);
+		LogMessage("Found log %s", lowestLog);
 		LogUpload_Upload(lowestLog);
 	} else {
-		PrintToServer("Unable to find valid log.");
+		LogError("Unable to find valid log.");
 	}
+	return Plugin_Handled;
 }
 
 LogUpload_Upload(const String:fullPath[]) {	
@@ -285,7 +373,7 @@ LogUpload_Completed(const String:filePath[], const String:title[], const String:
 			decl String:logUrl[64];
 			Format(logUrl, sizeof(logUrl), "http://%s/%i", LOGS_HOST, logId);
 			
-			PrintToServer("Uploaded Log URL: %s", logUrl);
+			LogMessage("Uploaded Log URL: %s", logUrl);
 			
 			new Action:result;
 			Call_StartForward(g_hForwardUploaded);
@@ -301,16 +389,16 @@ LogUpload_Completed(const String:filePath[], const String:title[], const String:
 				return;
 			}
 			
-			switch(GetConVarInt(g_hCvarDisplayMode)) {
-				case 0: {
-					CPrintToChatAll("{green}[LogUpload]{default} %t", "ChatText", logUrl);
-				}
-				case 1: {
-					PrintHintTextToAll("%t", "HintText", logUrl);
-				}
-				case 2: {
-					PrintCenterTextAll("%t", "CenterText", logUrl);
-				}
+			new mode = GetConVarInt(g_hCvarDisplayMode);
+			
+			if(mode & DISPLAYFLAG_CHAT) {
+				CPrintToChatAll("{green}[LogUpload]{default} %t", "ChatText", logUrl);
+			}
+			if(mode & DISPLAYFLAG_HINT) {
+				PrintHintTextToAll("%t", "HintText", logUrl);
+			}
+			if(mode & DISPLAYFLAG_CENTER) {
+				PrintCenterTextAll("%t", "CenterText", logUrl);
 			}
 		}
 	} else {
