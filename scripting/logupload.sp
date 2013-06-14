@@ -103,7 +103,7 @@ public OnPluginStart() {
 	// Non-protected cvars
 	g_hCvarEnabled = CreateConVar("sm_logupload_enabled", "1", "Enables/Disables LogUpload", 0, true, 0.0, true, 1.0);
 	g_hCvarUploadMode = CreateConVar("sm_logupload_mode", "1", "Determines when LogUpload should upload logs (0 = End of ANY Game, 1 = End of TOURNAMENT Game)", 0, true, 0.0, true, 1.0);
-	g_hCvarDisplayMode = CreateConVar("sm_logupload_display", "5", "Determines how LogUpload displays uploaded log urls\nCombine these values for more than 1:\n1: Show log URL in chat\n2: Show log URL in hint box\n3: Show log URL in center message", 0, true, 0.0, true, 7.0);
+	g_hCvarDisplayMode = CreateConVar("sm_logupload_display", "3", "Determines how LogUpload displays uploaded log urls\nCombine these values for more than 1:\n1: Show log URL in chat\n2: Show log URL in hint box\n3: Show log URL in center message", 0, true, 0.0, true, 7.0);
 	g_hCvarUpdater = CreateConVar("sm_logupload_updater", "1", "Enables/disables Updater", 0, true, 0.0, true, 1.0);
 	g_hCvarNextUploadDelay = CreateConVar("sm_logupload_delay", "60", "Sets how long until after a log is uploaded that another one can be.", 0, true);
 	
