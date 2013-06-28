@@ -11,9 +11,8 @@
 #undef REQUIRE_EXTENSIONS
 #include <cURL>
 #include <socket>
-#define REQUIRE_EXTENSIONS
 
-#define PLUGIN_VERSION "0.1.3"
+#define PLUGIN_VERSION "0.1.4"
 
 #define UPDATE_URL "http://nikkii.us/logupload/version.txt"
 
@@ -85,6 +84,9 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) 
 	CreateNative("LogUpload_UploadLog", Native_UploadLog);
 	CreateNative("LogUpload_ForceUpload", Native_ForceUpload);
 	
+	// Register the library
+	RegPluginLibrary("logupload");
+	
 	return APLRes_Success;
 }
 
@@ -131,6 +133,8 @@ public OnPluginStart() {
 	AutoExecConfig(true, "plugin.logupload");
 	
 	LoadTranslations("logupload.phrases");
+	
+	SetConVarBounds(g_hCvarDisplayMode, ConVarBound_Upper, true, 5.0);
 }
 
 // Updater support
@@ -273,7 +277,7 @@ public Event_GameOver(Handle:event, const String:name[], bool:dontBroadcast) {
 // Internal code (Log Scanning, Uploading, Callbacks)
 
 ScanLogs() {
-	LogToGame("Log closing...");
+	LogToGame("Log closing for log upload...");
 	// Close the current log
 	ServerCommand("log on");
 	ServerExecute();
