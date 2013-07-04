@@ -1,6 +1,5 @@
 // Originally by Exolent[jNr] (https://forums.alliedmods.net/showthread.php?t=189772)
 // Ported from AMXX pawn to SourceMod sourcepawn by Nicholas Hastings
-// Decoding fixed by Nikkii (https://forums.alliedmods.net/showpost.php?p=1914836&postcount=10)
 
 #if defined _json_included
 	#endinput

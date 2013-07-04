@@ -11,10 +11,11 @@
 #undef REQUIRE_EXTENSIONS
 #include <cURL>
 #include <socket>
+#include <smjansson>
 
-#define PLUGIN_VERSION "0.1.4"
+#define PLUGIN_VERSION "0.1.5"
 
-#define UPDATE_URL "http://nikkii.us/logupload/version.txt"
+#define UPDATE_URL "http://github.nikkii.us/logupload/master/updater.txt"
 
 #define LOGS_HOST "logs.tf"
 #define LOGS_PATH "/upload"
@@ -33,6 +34,9 @@
 // 4: Show log URL in a center message
 #define DISPLAYFLAG_CENTER (1 << 2)
 
+#define MODEFLAG_TOURNAMENT (1 << 0)
+#define MODEFLAG_NOBOTS (1 << 1)
+
 new Handle:g_hCvarKey = INVALID_HANDLE;
 new Handle:g_hCvarTitle = INVALID_HANDLE;
 
@@ -50,6 +54,7 @@ new Handle:g_hForwardUploading = INVALID_HANDLE;
 new Handle:g_hForwardUploaded = INVALID_HANDLE;
 new Handle:g_hCvarTournament = INVALID_HANDLE;
 
+new bool:g_bJansson = false;
 new g_iLastUpload = -1;
 
 public Plugin:myinfo = {
@@ -104,7 +109,7 @@ public OnPluginStart() {
 	
 	// Non-protected cvars
 	g_hCvarEnabled = CreateConVar("sm_logupload_enabled", "1", "Enables/Disables LogUpload", 0, true, 0.0, true, 1.0);
-	g_hCvarUploadMode = CreateConVar("sm_logupload_mode", "1", "Determines when LogUpload should upload logs (0 = End of ANY Game, 1 = End of TOURNAMENT Game)", 0, true, 0.0, true, 1.0);
+	g_hCvarUploadMode = CreateConVar("sm_logupload_mode", "1", "Determines when LogUpload should upload logs (0 = End of ANY Game, 1 = End of TOURNAMENT Game)", 0, true, 0.0, true, 3.0);
 	g_hCvarDisplayMode = CreateConVar("sm_logupload_display", "3", "Determines how LogUpload displays uploaded log urls\nCombine these values for more than 1:\n1: Show log URL in chat\n2: Show log URL in hint box\n3: Show log URL in center message", 0, true, 0.0, true, 7.0);
 	g_hCvarUpdater = CreateConVar("sm_logupload_updater", "1", "Enables/disables Updater", 0, true, 0.0, true, 1.0);
 	g_hCvarNextUploadDelay = CreateConVar("sm_logupload_delay", "60", "Sets how long until after a log is uploaded that another one can be.", 0, true);
@@ -134,14 +139,19 @@ public OnPluginStart() {
 	
 	LoadTranslations("logupload.phrases");
 	
+	// Set bounds in case we reloaded
+	SetConVarBounds(g_hCvarUploadMode, ConVarBound_Upper, true, 3.0);
 	SetConVarBounds(g_hCvarDisplayMode, ConVarBound_Upper, true, 5.0);
 }
 
-// Updater support
+// Updater and SMJansson support
 
-public OnConfigsExecuted() {
+public OnAllPluginsLoaded() {
 	if (LibraryExists("updater") && GetConVarBool(g_hCvarUpdater)) {
 		Updater_AddPlugin(UPDATE_URL);
+	}
+	if (LibraryExists("jansson")) {
+		g_bJansson = true;
 	}
 }
 
@@ -149,11 +159,17 @@ public OnLibraryAdded(const String:name[]) {
 	if (StrEqual(name, "updater") && GetConVarBool(g_hCvarUpdater)) {
 		Updater_AddPlugin(UPDATE_URL);
 	}
+	if (StrEqual(name, "jansson")) {
+		g_bJansson = true;
+	}
 }
 
 public OnLibraryRemoved(const String:name[]) {
 	if (StrEqual(name, "updater") && GetConVarBool(g_hCvarUpdater)) {
 		Updater_RemovePlugin();
+	}
+	if (StrEqual(name, "jansson")) {
+		g_bJansson = false;
 	}
 }
 
@@ -266,12 +282,10 @@ public Event_GameOver(Handle:event, const String:name[], bool:dontBroadcast) {
 		LogError("Last log uploaded %i seconds ago. Skipping search and upload.");
 		return;
 	}
-	new uploadMode = GetConVarInt(g_hCvarUploadMode);
-	new bool:tournament = GetConVarBool(g_hCvarTournament);
-	if (uploadMode == 0 || uploadMode == 1 && tournament) {
+	if (ShouldLogUpload()) {
 		ScanLogs();
+		g_iLastUpload = GetTime();
 	}
-	g_iLastUpload = GetTime();
 }
 
 // Internal code (Log Scanning, Uploading, Callbacks)
@@ -369,48 +383,94 @@ LogUpload_DoUpload(const String:fullPath[], const String:title[], const String:m
 	}
 }
 
-LogUpload_Completed(const String:filePath[], const String:title[], const String:map[], JSON:json) {
-	new bool:success = false;
-	if (json_get_cell(json, "success", success) && success) {
-		new logId = -1;
-		if (json_get_cell(json, "log_id", logId)) {
-			decl String:logUrl[64];
-			Format(logUrl, sizeof(logUrl), "http://%s/%i", LOGS_HOST, logId);
-			
-			LogMessage("Uploaded Log URL: %s", logUrl);
-			
-			new Action:result;
-			Call_StartForward(g_hForwardUploaded);
-			
-			Call_PushString(filePath);
-			Call_PushString(logUrl);
-			Call_PushString(title);
-			Call_PushString(map);
-			
-			Call_Finish(_:result);
-			
-			if(result == Plugin_Stop) {
-				return;
-			}
-			
-			new mode = GetConVarInt(g_hCvarDisplayMode);
-			
-			if(mode & DISPLAYFLAG_CHAT) {
-				CPrintToChatAll("{green}[LogUpload]{default} %t", "ChatText", logUrl);
-			}
-			if(mode & DISPLAYFLAG_HINT) {
-				PrintHintTextToAll("%t", "HintText", logUrl);
-			}
-			if(mode & DISPLAYFLAG_CENTER) {
-				PrintCenterTextAll("%t", "CenterText", logUrl);
+LogUpload_Completed(const String:filePath[], const String:title[], const String:map[], const String:temp[]) {
+	if(g_bJansson) {
+		// SMJansson is faster and easier to use. Prefer it if we can.
+		new Handle:json = json_load(temp);
+		if(json_object_get_bool(json, "success")) {
+			new logId = json_object_get_int(json, "logId");
+			LogUpload_PostProcess(logId, filePath, title, map);
+		} else {
+			decl String:error[256];
+			if(json_object_get_string(json, "error", error, sizeof(error)) != -1) {
+				LogMessage("Error while uploading log %s! Error: %s", filePath, error);
+			} else {
+				LogError("Unknown error while uploading");
 			}
 		}
+		CloseHandle(json);
 	} else {
-		decl String:error[256];
-		if (json_get_string(json, "error", error, sizeof(error))) {
-			LogError("Error while uploading log %s! Error: %s", filePath, error);
-		} else {
-			LogError("Unknown error while uploading");
+		// However, the include is easier to setup.
+		new JSON:json = json_decode(temp);
+		if(json != JSON_INVALID) {
+			new bool:success = false;
+			if (json_get_cell(json, "success", success) && success) {
+				new logId = -1;
+				if (json_get_cell(json, "log_id", logId)) {
+					LogUpload_PostProcess(logId, filePath, title, map);
+				}
+			} else {
+				decl String:error[256];
+				if (json_get_string(json, "error", error, sizeof(error))) {
+					LogError("Error while uploading log %s! Error: %s", filePath, error);
+				} else {
+					LogError("Unknown error while uploading");
+				}
+			}
+		}
+		json_destroy(json);
+	}
+}
+
+LogUpload_PostProcess(logId, const String:filePath[], const String:title[], const String:map[]) {
+	decl String:logUrl[64];
+	Format(logUrl, sizeof(logUrl), "http://%s/%i", LOGS_HOST, logId);
+	
+	LogMessage("Uploaded Log URL: %s", logUrl);
+	
+	new Action:result;
+	Call_StartForward(g_hForwardUploaded);
+	
+	Call_PushString(filePath);
+	Call_PushString(logUrl);
+	Call_PushString(title);
+	Call_PushString(map);
+	
+	Call_Finish(_:result);
+	
+	if(result == Plugin_Stop) {
+		return;
+	}
+	
+	new mode = GetConVarInt(g_hCvarDisplayMode);
+	
+	if(mode & DISPLAYFLAG_CHAT) {
+		CPrintToChatAll("{green}[LogUpload]{default} %t", "ChatText", logUrl);
+	}
+	if(mode & DISPLAYFLAG_HINT) {
+		PrintHintTextToAll("%t", "HintText", logUrl);
+	}
+	if(mode & DISPLAYFLAG_CENTER) {
+		PrintCenterTextAll("%t", "CenterText", logUrl);
+	}
+}
+
+bool:ShouldLogUpload() {
+	// New mode system, based on multiple conditions which can be checked/added onto the same way as display
+	new bool:ret = true;
+	new flag = GetConVarInt(g_hCvarUploadMode);
+	
+	if((flag & MODEFLAG_TOURNAMENT) && ret) {
+		// Tournament will be '1' or 'true'
+		ret = GetConVarBool(g_hCvarTournament);
+	}
+	if((flag & MODEFLAG_NOBOTS) && ret) {
+		for(new i = 0; i < MaxClients; i++) {
+			if(IsClientConnected(i) && IsFakeClient(i) && !IsClientSourceTV(i) && !IsClientReplay(i)) {
+				ret = false;
+				break;
+			}
 		}
 	}
+	return ret;
 }

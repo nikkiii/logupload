@@ -1,0 +1,25 @@
+"Updater"
+{
+	"Information"
+	{
+		"Version"
+		{
+			"Latest"	"0.1.5"
+		}
+		
+		"Notes"	"Fixed/Added in 0.1.5: SMJansson support, updated updater url."
+		"Notes" "Fixed in 0.1.4: Library registration"
+	}
+	
+	"Files"
+	{
+		"Plugin"	"Path_SM/plugins/logupload.smx"
+		"Plugin"	"Path_SM/translations/logupload.phrases.txt"
+		
+		"Source"	"Path_SM/scripting/logupload.sp"
+		"Source"	"Path_SM/scripting/logupload/curl.sp"
+		"Source"	"Path_SM/scripting/logupload/socket.sp"
+		"Source"	"Path_SM/scripting/include/json.inc"
+		"Source"	"Path_SM/scripting/include/logupload.inc"
+	}
+}

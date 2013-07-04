@@ -49,3 +49,8 @@ public SharedPlugin:__pl_logupload =
 	required = 0,
 #endif
 };
+
+public __pl_logupload_SetNTVOptional()
+{
+	MarkNativeAsOptional("LogUpload_UploadLog");
+}

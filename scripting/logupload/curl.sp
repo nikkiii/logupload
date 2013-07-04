@@ -56,11 +56,7 @@ public cURL_OnComplete(Handle:handle, CURLcode:code, any:pack) {
 		ReadPackString(pack, title, sizeof(title));
 		ReadPackString(pack, map, sizeof(map));
 		
-		new JSON:json = json_decode(temp);
-		if(json != JSON_INVALID) {
-			LogUpload_Completed(filePath, title, map, json);
-		}
-		json_destroy(json);
+		LogUpload_Completed(filePath, title, map, temp);
 	}
 	DeleteFile(LOGUPLOAD_TEMPPATH);
 	
