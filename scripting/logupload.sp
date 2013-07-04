@@ -21,7 +21,7 @@
 #define LOGS_PATH "/upload"
 
 #include "logupload/curl.sp"
-#include "logupload/socket.sp"
+// #include "logupload/socket.sp"
 
 #define CURL_AVAILABLE()		(GetFeatureStatus(FeatureType_Native, "curl_easy_init") == FeatureStatus_Available)
 #define SOCKET_AVAILABLE()		(false) //(GetFeatureStatus(FeatureType_Native, "SocketCreate") == FeatureStatus_Available)
