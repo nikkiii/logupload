@@ -135,6 +135,8 @@ public OnPluginStart() {
 	// Win conditions met (windifference)
 	HookEvent("tf_game_over", Event_GameOver);
 	
+	RegAdminCmd("sm_uploadlog", Command_Upload, ADMFLAG_BAN);
+	
 	AutoExecConfig(true, "plugin.logupload");
 	
 	LoadTranslations("logupload.phrases");
@@ -171,6 +173,14 @@ public OnLibraryRemoved(const String:name[]) {
 	if (StrEqual(name, "jansson")) {
 		g_bJansson = false;
 	}
+}
+
+// Commands (Currently one)
+
+public Action:Command_Upload(client, args) {
+	ReplyToCommand(client, "[SM] Starting upload on latest log...");
+	ScanLogs();
+	return Plugin_Handled;
 }
 
 // 'getters' for cvars
@@ -394,8 +404,12 @@ LogUpload_Completed(const String:filePath[], const String:title[], const String:
 			decl String:error[256];
 			if(json_object_get_string(json, "error", error, sizeof(error)) != -1) {
 				LogMessage("Error while uploading log %s! Error: %s", filePath, error);
+				decl String:str[512];
+				Format(str, sizeof(str), "Failed to upload log, error: %s", error);
+				ShowMessage(str);
 			} else {
 				LogError("Unknown error while uploading");
+				ShowMessage("Unknown error while uploading");
 			}
 		}
 		CloseHandle(json);
@@ -413,8 +427,12 @@ LogUpload_Completed(const String:filePath[], const String:title[], const String:
 				decl String:error[256];
 				if (json_get_string(json, "error", error, sizeof(error))) {
 					LogError("Error while uploading log %s! Error: %s", filePath, error);
+					decl String:str[512];
+					Format(str, sizeof(str), "Failed to upload log, error: %s", error);
+					ShowMessage(str);
 				} else {
 					LogError("Unknown error while uploading");
+					ShowMessage("Unknown error while uploading");
 				}
 			}
 		}
@@ -455,18 +473,33 @@ LogUpload_PostProcess(logId, const String:filePath[], const String:title[], cons
 	}
 }
 
+ShowMessage(const String:text[]) {
+	new mode = GetConVarInt(g_hCvarDisplayMode);
+	
+	if(mode & DISPLAYFLAG_CHAT) {
+		CPrintToChatAll("{green}[LogUpload]{default} %s", text);
+	}
+	if(mode & DISPLAYFLAG_HINT) {
+		PrintHintTextToAll("%s", text);
+	}
+	if(mode & DISPLAYFLAG_CENTER) {
+		PrintCenterTextAll("%s", text);
+	}
+}
+
 bool:ShouldLogUpload() {
 	// New mode system, based on multiple conditions which can be checked/added onto the same way as display
 	new bool:ret = true;
 	new flag = GetConVarInt(g_hCvarUploadMode);
 	
 	if((flag & MODEFLAG_TOURNAMENT) && ret) {
-		// Tournament will be '1' or 'true'
+		// Tournament will be '1' if enabled
 		ret = GetConVarBool(g_hCvarTournament);
 	}
 	if((flag & MODEFLAG_NOBOTS) && ret) {
+		// Scan for bots, ignoring SourceTV and Replay
 		for(new i = 0; i < MaxClients; i++) {
-			if(IsClientConnected(i) && IsFakeClient(i) && !IsClientSourceTV(i) && !IsClientReplay(i)) {
+			if(IsClientConnected(i) && !IsClientSourceTV(i) && !IsClientReplay(i) && IsFakeClient(i)) {
 				ret = false;
 				break;
 			}
