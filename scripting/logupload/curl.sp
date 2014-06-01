@@ -13,10 +13,12 @@ new CURL_Default_opt[][2] = {
 UploadLog_cURL(const String:fileName[], const String:fullPath[], const String:title[], const String:map[]) {
 	new Handle:cURL = curl_easy_init();
 	if (cURL != INVALID_HANDLE) {
+		
 		new Handle:form = curl_httppost();
 		curl_formadd(form, CURLFORM_COPYNAME, "key", CURLFORM_COPYCONTENTS, LogUpload_GetKey(), CURLFORM_END);
 		curl_formadd(form, CURLFORM_COPYNAME, "title", CURLFORM_COPYCONTENTS, title, CURLFORM_END);
 		curl_formadd(form, CURLFORM_COPYNAME, "map", CURLFORM_COPYCONTENTS, map, CURLFORM_END);
+		curl_formadd(form, CURLFORM_COPYNAME, "uploader", CURLFORM_COPYCONTENTS, g_sUploader, CURLFORM_END);
 		curl_formadd(form, CURLFORM_COPYNAME, "logfile", CURLFORM_FILE, fullPath, CURLFORM_END);
 		
 		CURL_DEFAULT_OPT(cURL);

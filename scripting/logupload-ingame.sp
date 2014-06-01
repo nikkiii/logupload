@@ -19,6 +19,10 @@ public OnPluginStart() {
 	AddCommandListener(Command_Say, "say_team");
 }
 
+public OnLogUploading(const String:filePath[], const String:title[], const String:map[]) {
+	g_sLogUrl[0] = '\0';
+}
+
 public OnLogUploaded(const String:filePath[], const String:logUrl[], const String:title[], const String:map[]) {
 	// Copy log url to the local url which is hooked with .ss and /log
 	strcopy(g_sLogUrl, sizeof(g_sLogUrl), logUrl);

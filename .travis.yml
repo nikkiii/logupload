@@ -1,0 +1,23 @@
+language: c
+
+env:
+    - SMVERSION=1.5
+before_install:
+    - sudo apt-get update
+    - sudo apt-get install gcc-multilib wget
+
+before_script:
+    - FILELIST=`ls scripting | grep sp`
+    - SMPACKAGE=`wget -qO- http://nikkii.us/smlink.php?ver=$SMVERSION&platform=linux`
+    - wget $SMPACKAGE
+    - tar -xzf $(basename "$SMPACKAGE")
+    - cp scripting/* addons/sourcemod/scripting/
+    - cd addons/sourcemod/scripting/
+    - chmod +x spcomp
+    - chmod +x compile.sh
+
+script: 
+    - ./compile.sh $FILELIST
+
+after_script:
+    - ls ../plugins

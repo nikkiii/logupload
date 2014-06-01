@@ -10,7 +10,6 @@
 
 #undef REQUIRE_EXTENSIONS
 #include <cURL>
-#include <socket>
 #include <smjansson>
 
 #define PLUGIN_VERSION "0.1.5"
@@ -20,11 +19,11 @@
 #define LOGS_HOST "logs.tf"
 #define LOGS_PATH "/upload"
 
+new String:g_sUploader[64];
+
 #include "logupload/curl.sp"
-// #include "logupload/socket.sp"
 
 #define CURL_AVAILABLE()		(GetFeatureStatus(FeatureType_Native, "curl_easy_init") == FeatureStatus_Available)
-#define SOCKET_AVAILABLE()		(false) //(GetFeatureStatus(FeatureType_Native, "SocketCreate") == FeatureStatus_Available)
 
 // Combine the following values to get the display mode to your liking
 // 1: Show log URL in chat
@@ -76,14 +75,6 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) 
 	MarkNativeAsOptional("curl_formadd");
 	MarkNativeAsOptional("curl_httppost");
 	
-	// Socket
-	
-	MarkNativeAsOptional("SocketCreate");
-	MarkNativeAsOptional("SocketSetArg");
-	MarkNativeAsOptional("SocketSetOption");
-	MarkNativeAsOptional("SocketConnect");
-	MarkNativeAsOptional("SocketSend");
-	
 	// Natives
 	
 	CreateNative("LogUpload_UploadLog", Native_UploadLog);
@@ -96,7 +87,7 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max) 
 }
 
 public OnPluginStart() {
-	if (!CURL_AVAILABLE() && !SOCKET_AVAILABLE()) {
+	if (!CURL_AVAILABLE()) {
 		SetFailState("Valid HTTP Extension not found");
 	}
 	
@@ -136,6 +127,8 @@ public OnPluginStart() {
 	HookEvent("tf_game_over", Event_GameOver);
 	
 	RegAdminCmd("sm_uploadlog", Command_Upload, ADMFLAG_BAN);
+	
+	Format(g_sUploader, sizeof(g_sUploader), "LogUpload %s", PLUGIN_VERSION);
 	
 	AutoExecConfig(true, "plugin.logupload");
 	
