@@ -11,7 +11,7 @@ before_script:
     - SMPACKAGE=`wget -qO- http://nikkii.us/smlink.php?ver=$SMVERSION&platform=linux`
     - wget $SMPACKAGE
     - tar -xzf $(basename "$SMPACKAGE")
-    - cp scripting/* addons/sourcemod/scripting/
+    - cp -R scripting/* addons/sourcemod/scripting/
     - cd addons/sourcemod/scripting/
     - chmod +x spcomp
     - chmod +x compile.sh
