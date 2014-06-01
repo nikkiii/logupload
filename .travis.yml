@@ -7,7 +7,6 @@ before_install:
     - sudo apt-get install gcc-multilib wget
 
 before_script:
-    - FILELIST=`ls scripting | grep sp`
     - SMPACKAGE=`wget -qO- http://nikkii.us/smlink.php?ver=$SMVERSION&platform=linux`
     - wget $SMPACKAGE
     - tar -xzf $(basename "$SMPACKAGE")
@@ -17,7 +16,7 @@ before_script:
     - chmod +x compile.sh
 
 script: 
-    - ./compile.sh $FILELIST
+    - ./compile.sh `ls scripting | grep sp`
 
 after_script:
     - ls ../plugins
